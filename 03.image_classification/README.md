@@ -173,79 +173,79 @@ paddle.init(use_gpu=False, trainer_count=1)
 
 1. 定义数据输入及其维度
 
-    网络输入定义为 `data_layer` (数据层)，在图像分类中即为图像像素信息。CIFRAR10是RGB 3通道32x32大小的彩色图，因此输入数据大小为3072(3x32x32)，类别大小为10，即10分类。
+网络输入定义为 `data_layer` (数据层)，在图像分类中即为图像像素信息。CIFRAR10是RGB 3通道32x32大小的彩色图，因此输入数据大小为3072(3x32x32)，类别大小为10，即10分类。
 
-    ```python
-    datadim = 3 * 32 * 32
-    classdim = 10
+```python
+datadim = 3 * 32 * 32
+classdim = 10
 
-    image = paddle.layer.data(
-        name="image", type=paddle.data_type.dense_vector(datadim))
-    ```
+image = paddle.layer.data(
+    name="image", type=paddle.data_type.dense_vector(datadim))
+```
 
 2. 定义VGG网络核心模块
 
-    ```python
-    net = vgg_bn_drop(image)
-    ```
-    VGG核心模块的输入是数据层，`vgg_bn_drop` 定义了16层VGG结构，每层卷积后面引入BN层和Dropout层，详细的定义如下：
+```python
+net = vgg_bn_drop(image)
+```
+VGG核心模块的输入是数据层，`vgg_bn_drop` 定义了16层VGG结构，每层卷积后面引入BN层和Dropout层，详细的定义如下：
 
-    ```python
-    def vgg_bn_drop(input):
-        def conv_block(ipt, num_filter, groups, dropouts, num_channels=None):
-            return paddle.networks.img_conv_group(
-                input=ipt,
-                num_channels=num_channels,
-                pool_size=2,
-                pool_stride=2,
-                conv_num_filter=[num_filter] * groups,
-                conv_filter_size=3,
-                conv_act=paddle.activation.Relu(),
-                conv_with_batchnorm=True,
-                conv_batchnorm_drop_rate=dropouts,
-                pool_type=paddle.pooling.Max())
+```python
+def vgg_bn_drop(input):
+    def conv_block(ipt, num_filter, groups, dropouts, num_channels=None):
+        return paddle.networks.img_conv_group(
+            input=ipt,
+            num_channels=num_channels,
+            pool_size=2,
+            pool_stride=2,
+            conv_num_filter=[num_filter] * groups,
+            conv_filter_size=3,
+            conv_act=paddle.activation.Relu(),
+            conv_with_batchnorm=True,
+            conv_batchnorm_drop_rate=dropouts,
+            pool_type=paddle.pooling.Max())
 
-        conv1 = conv_block(input, 64, 2, [0.3, 0], 3)
-        conv2 = conv_block(conv1, 128, 2, [0.4, 0])
-        conv3 = conv_block(conv2, 256, 3, [0.4, 0.4, 0])
-        conv4 = conv_block(conv3, 512, 3, [0.4, 0.4, 0])
-        conv5 = conv_block(conv4, 512, 3, [0.4, 0.4, 0])
+    conv1 = conv_block(input, 64, 2, [0.3, 0], 3)
+    conv2 = conv_block(conv1, 128, 2, [0.4, 0])
+    conv3 = conv_block(conv2, 256, 3, [0.4, 0.4, 0])
+    conv4 = conv_block(conv3, 512, 3, [0.4, 0.4, 0])
+    conv5 = conv_block(conv4, 512, 3, [0.4, 0.4, 0])
 
-        drop = paddle.layer.dropout(input=conv5, dropout_rate=0.5)
-        fc1 = paddle.layer.fc(input=drop, size=512, act=paddle.activation.Linear())
-        bn = paddle.layer.batch_norm(
-            input=fc1,
-            act=paddle.activation.Relu(),
-            layer_attr=paddle.attr.Extra(drop_rate=0.5))
-        fc2 = paddle.layer.fc(input=bn, size=512, act=paddle.activation.Linear())
-        return fc2
-    ```
+    drop = paddle.layer.dropout(input=conv5, dropout_rate=0.5)
+    fc1 = paddle.layer.fc(input=drop, size=512, act=paddle.activation.Linear())
+    bn = paddle.layer.batch_norm(
+        input=fc1,
+        act=paddle.activation.Relu(),
+        layer_attr=paddle.attr.Extra(drop_rate=0.5))
+    fc2 = paddle.layer.fc(input=bn, size=512, act=paddle.activation.Linear())
+    return fc2
+```
 
-    2.1. 首先定义了一组卷积网络，即conv_block。卷积核大小为3x3，池化窗口大小为2x2，窗口滑动大小为2，groups决定每组VGG模块是几次连续的卷积操作，dropouts指定Dropout操作的概率。所使用的`img_conv_group`是在`paddle.networks`中预定义的模块，由若干组 Conv->BN->ReLu->Dropout 和 一组 Pooling 组成。
+2.1. 首先定义了一组卷积网络，即conv_block。卷积核大小为3x3，池化窗口大小为2x2，窗口滑动大小为2，groups决定每组VGG模块是几次连续的卷积操作，dropouts指定Dropout操作的概率。所使用的`img_conv_group`是在`paddle.networks`中预定义的模块，由若干组 Conv->BN->ReLu->Dropout 和 一组 Pooling 组成。
 
-    2.2. 五组卷积操作，即 5个conv_block。 第一、二组采用两次连续的卷积操作。第三、四、五组采用三次连续的卷积操作。每组最后一个卷积后面Dropout概率为0，即不使用Dropout操作。
+2.2. 五组卷积操作，即 5个conv_block。 第一、二组采用两次连续的卷积操作。第三、四、五组采用三次连续的卷积操作。每组最后一个卷积后面Dropout概率为0，即不使用Dropout操作。
 
-    2.3. 最后接两层512维的全连接。
+2.3. 最后接两层512维的全连接。
 
 3. 定义分类器
 
-    通过上面VGG网络提取高层特征，然后经过全连接层映射到类别维度大小的向量，再通过Softmax归一化得到每个类别的概率，也可称作分类器。
+通过上面VGG网络提取高层特征，然后经过全连接层映射到类别维度大小的向量，再通过Softmax归一化得到每个类别的概率，也可称作分类器。
 
-    ```python
-    out = paddle.layer.fc(input=net,
-                          size=classdim,
-                          act=paddle.activation.Softmax())
-    ```
+```python
+out = paddle.layer.fc(input=net,
+                        size=classdim,
+                        act=paddle.activation.Softmax())
+```
 
 4. 定义损失函数和网络输出
 
-    在有监督训练中需要输入图像对应的类别信息，同样通过`paddle.layer.data`来定义。训练中采用多类交叉熵作为损失函数，并作为网络的输出，预测阶段定义网络的输出为分类器得到的概率信息。
+在有监督训练中需要输入图像对应的类别信息，同样通过`paddle.layer.data`来定义。训练中采用多类交叉熵作为损失函数，并作为网络的输出，预测阶段定义网络的输出为分类器得到的概率信息。
 
-    ```python
-    lbl = paddle.layer.data(
-        name="label", type=paddle.data_type.integer_value(classdim))
-    cost = paddle.layer.classification_cost(input=out, label=lbl)
-    ```
+```python
+lbl = paddle.layer.data(
+    name="label", type=paddle.data_type.integer_value(classdim))
+cost = paddle.layer.classification_cost(input=out, label=lbl)
+```
 
 ### ResNet
 
